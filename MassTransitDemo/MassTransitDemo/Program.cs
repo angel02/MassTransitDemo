@@ -1,9 +1,27 @@
+using MassTransit;
+using MassTransitDemo.Messages;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, config) =>
+    {
+        var uri = new Uri(builder.Configuration["RabbitMQ:Endpoint"]);
+
+        config.Host(uri, "TestConecction", host =>
+        {
+            host.Username(builder.Configuration["RabbitMQ:User"]);
+            host.Password(builder.Configuration["RabbitMQ:Password"]);
+        });
+
+        config.ConfigureEndpoints(context);
+    });
+});
 
 var app = builder.Build();
 
@@ -14,28 +32,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
 
-app.MapGet("/weatherforecast", () =>
+
+app.MapPost("api/product/create", async (Product product, IPublishEndpoint publishEndpoint) =>
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateTime.Now.AddDays(index),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    if (product != null)
+    {
+        await publishEndpoint.Publish<Product>(product);
+
+        return "Ok";
+    }
+
+    return "badrequest";
+});
 
 app.Run();
-
-internal record WeatherForecast(DateTime Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
